@@ -3,27 +3,23 @@ package com.zivver.webpush
 import java.security._
 import java.util.Base64
 
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.{HttpMethods, HttpRequest, HttpResponse}
 import com.zivver.webpush.Encryption.Encrypted
-import org.apache.http.HttpResponse
-import org.apache.http.client.HttpClient
-import org.apache.http.client.methods.HttpPost
-import org.apache.http.entity.ByteArrayEntity
-import org.apache.http.impl.client.HttpClients
-import org.apache.http.message.BasicHeader
 import org.bouncycastle.jce.interfaces.ECPublicKey
 import pdi.jwt.Jwt
 import pdi.jwt.JwtAlgorithm.ES256
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 /**
   * Push service.
   */
-case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: String, exp: FiniteDuration = 12.hours) {
+case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: String, processRequest: HttpRequest => Future[HttpResponse], exp: FiniteDuration = 12.hours) {
 
   private val base64encoder = Base64.getUrlEncoder
   private val defaultTtl: Int = 2419200
-  private val httpClient: HttpClient = HttpClients.createDefault
 
   /**
     * Send a data free push notification.
@@ -31,7 +27,7 @@ case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: St
     * @param subscription Browser subscription object.
     * @return HttpResponse from push server.
     */
-  def send(subscription: Subscription): HttpResponse = send(subscription, None, defaultTtl)
+  def send(subscription: Subscription): Future[HttpResponse] = send(subscription, None, defaultTtl)
 
   /**
     * Send a data free push notification.
@@ -41,7 +37,7 @@ case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: St
     *                     and attempt to deliver it.
     * @return HttpResponse from push server.
     */
-  def send(subscription: Subscription, ttl: Int): HttpResponse = send(subscription, None, ttl)
+  def send(subscription: Subscription, ttl: Int): Future[HttpResponse] = send(subscription, None, ttl)
 
   /**
     * Sends a data bearing push notification.
@@ -52,9 +48,9 @@ case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: St
     *                     and attempt to deliver it. If not specified default value will be used.
     * @return HttpResponse from push server.
     */
-  def send(subscription: Subscription, payload: String, ttl: Int): HttpResponse = send(subscription, Some(payload.getBytes), ttl)
+  def send(subscription: Subscription, payload: String, ttl: Int): Future[HttpResponse] = send(subscription, Some(payload.getBytes), ttl)
 
-  def send(subscription: Subscription, payload: String): HttpResponse = send(subscription, Some(payload.getBytes), defaultTtl)
+  def send(subscription: Subscription, payload: String): Future[HttpResponse] = send(subscription, Some(payload.getBytes), defaultTtl)
 
   /**
     *
@@ -66,19 +62,32 @@ case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: St
     *                     and attempt to deliver it. If not specified default value will be used.
     * @return HttpResponse from push server.
     */
-  def send(subscription: Subscription, payload: Array[Byte], ttl: Int = defaultTtl): HttpResponse = send(subscription, Some(payload), ttl)
+  def send(subscription: Subscription, payload: Array[Byte], ttl: Int = defaultTtl): Future[HttpResponse] = send(subscription, Some(payload), ttl)
 
   private def send(subscription: Subscription, payload: Option[Array[Byte]], ttl: Int) = {
 
-    val httpPost = new HttpPost(subscription.endpoint)
+    var httpRequest =
+      HttpRequest(
+        method = HttpMethods.POST,
+        uri = subscription.endpoint
+      )
 
     payload.fold(vapidHeaders(subscription.origin, ttl)) {
       p =>
         val (encryptionHeaders, content) = handleEncryption(p, subscription)
-        httpPost.setEntity(new ByteArrayEntity(content))
-        vapidHeaders(subscription.origin, ttl) ++ encryptionHeaders
-    }.foreach { case (k, v) => httpPost.addHeader(new BasicHeader(k, v)) }
-    httpClient.execute(httpPost)
+        httpRequest = httpRequest.withEntity(content)
+        encryptionHeaders
+    }.foreach {
+      case (k, v) =>
+        httpRequest = httpRequest.addHeader(RawHeader(k, v))
+    }
+
+    vapidHeaders(subscription.origin, ttl).map { e =>
+      httpRequest = httpRequest.addHeader(RawHeader(e._1, e._2))
+    }
+
+    processRequest(httpRequest)
+
   }
 
   private def vapidHeaders(origin: String, ttl: Int): Map[String, String] = {
