@@ -14,8 +14,8 @@ resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/release
 val akkaVersion = "10.0.9"
 
 libraryDependencies ++= Seq(
-  "com.pauldijou" %% "jwt-core" % "0.10.0",
-  "org.bouncycastle" % "bcprov-jdk15on" % "1.55",
+  "com.pauldijou" %% "jwt-core" % "0.14.1",
+  "org.bouncycastle" % "bcprov-jdk15on" % "1.59",
   "com.typesafe.akka" %% "akka-http" % akkaVersion
 )
 
