@@ -16,9 +16,11 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
   */
 object HttpEce {
 
+  private val securityProvider: Provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+
   def encrypt(keys: KeyPair, buffer: Array[Byte], salt: Array[Byte], dh: PublicKey, authSecret: Array[Byte]): Array[Byte] = {
     val (key_, nonce_) = deriveKey(keys, salt, dh, authSecret)
-    val cipher: Cipher = Cipher.getInstance("AES/GCM/NoPadding", BouncyCastleProvider.PROVIDER_NAME)
+    val cipher: Cipher = Cipher.getInstance("AES/GCM/NoPadding", securityProvider)
     cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key_, "AES"), new GCMParameterSpec(16 * 8, nonce_))
     cipher.update(Array.ofDim[Byte](2))
     cipher.doFinal(buffer)

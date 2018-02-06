@@ -11,6 +11,8 @@ import org.bouncycastle.jce.spec.{ECNamedCurveParameterSpec, ECPrivateKeySpec, E
 
 object Utils {
 
+  private val securityProvider: Provider = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+
   def savePublicKey(publicKey: ECPublicKey): Array[Byte] = publicKey.getQ.getEncoded(false)
 
   def savePrivateKey(privateKey: ECPrivateKey): Array[Byte] = privateKey.getD.toByteArray
@@ -22,12 +24,12 @@ object Utils {
 
   def loadPublicKey(encodedPublicKey: String): PublicKey = {
     val ecSpec: ECNamedCurveParameterSpec = ECNamedCurveTable.getParameterSpec("prime256v1")
-    KeyFactory.getInstance("ECDH", BouncyCastleProvider.PROVIDER_NAME)
+    KeyFactory.getInstance("ECDH", securityProvider)
       .generatePublic(new ECPublicKeySpec(ecSpec.getCurve.decodePoint(base64Decode(encodedPublicKey)), ecSpec))
   }
 
   def loadPrivateKey(encodedPrivateKey: String): PrivateKey = {
-    KeyFactory.getInstance("ECDH", BouncyCastleProvider.PROVIDER_NAME)
+    KeyFactory.getInstance("ECDH", securityProvider)
       .generatePrivate(new ECPrivateKeySpec(new BigInteger(base64Decode(encodedPrivateKey)),
         ECNamedCurveTable.getParameterSpec("prime256v1")))
   }
