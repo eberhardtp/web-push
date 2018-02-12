@@ -16,7 +16,7 @@ import scala.concurrent.duration._
 /**
   * Push service.
   */
-case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: String, processRequest: HttpRequest => Future[HttpResponse], exp: FiniteDuration = 12.hours) {
+case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: String, processRequest: Option[HttpRequest => Future[HttpResponse]], exp: FiniteDuration = 12.hours) {
 
   private val base64encoder = Base64.getUrlEncoder
   val defaultTtl: Int = 2419200
@@ -93,10 +93,13 @@ case class PushService(publicKey: PublicKey, privateKey: PrivateKey, subject: St
       httpRequest
     }
 
+    def process(processorFunction: Option[HttpRequest => Future[HttpResponse]])(httpRequest: HttpRequest): Future[HttpResponse] =
+      processorFunction map (_(httpRequest)) getOrElse( throw new RuntimeException("Given http processor function is Option.None! Calling send(...) method possible only if HttpRequest => Future[HttpResponse] method was available!") )
+
     for {
       vapidHeaders <- vapidHeaderF
       httpRequest <- httpRequestSetupF(vapidHeaders)
-      httpResponse <- processRequest(httpRequest)
+      httpResponse <- process(processRequest)(httpRequest)
     } yield httpResponse
 
   }
